@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini — Hotell-inspirerat spel (prototyp)</title>
+<style>
+  html,body{height:100%;margin:0;font-family:Inter, Arial, sans-serif;background:#222;color:#fff}
+  #game {display:block;margin:12px auto;background:#8fb3d9; border:6px solid #333; box-shadow:0 8px 24px rgba(0,0,0,0.6)}
+  .ui {width:640px;margin:8px auto;text-align:center}
+  .hint {font-size:14px;color:#ddd}
+</style>
+</head>
+<body>
+  <div class="ui">
+    <h2>Hotell-inspirerad prototyp — använd piltangenterna</h2>
+    <div class="hint">Pil ←↑→↓ = gå. Mellanslag = interagera. Samla 3 stjärnor för att vinna.</div>
+  </div>
+  <canvas id="game" width="640" height="360"></canvas>
+  <div class="ui" style="opacity:0.9">
+    <small>Observera: grafik och ljud är placeholders (originalresurser kräver tillstånd).</small>
+  </div>
+
+<script>
+/* Enkel 2D-spelprototyp
+   - spelar en fyrkant, går med pilar
+   - tre stjärnor att samla
+   - enkel NPC med dialog (mellanslag)
+   - när alla stjärnor samlade visas vinsttext
+*/
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const W = canvas.width, H = canvas.height;
+
+// Spelstaten
+let keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; if(e.key===' '){ e.preventDefault(); }});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+const player = {
+  x: 100, y: 220, w: 28, h: 40,
+  speed: 2.2,
+  dir: 'down' // for future sprites
+};
+
+const stars = [
+  {x:420,y:80, r:12, collected:false},
+  {x:120,y:120, r:12, collected:false},
+  {x:520,y:260, r:12, collected:false}
+];
+
+const npc = {x:300, y:160, w:34, h:46, dialogShown:false};
+
+let messages = [];
+function pushMessage(t,secs=3){ messages.push({t,ttl:secs*60}); }
+
+function rectsOverlap(a,b){
+  return !(a.x+a.w < b.x || a.x > b.x+b.w || a.y+a.h < b.y || a.y > b.y+b.h);
+}
+
+function update(){
+  // player movement
+  let vx=0, vy=0;
+  if(keys['ArrowLeft'] || keys['a']) vx -= 1;
+  if(keys['ArrowRight'] || keys['d']) vx += 1;
+  if(keys['ArrowUp'] || keys['w']) vy -= 1;
+  if(keys['ArrowDown'] || keys['s']) vy += 1;
+  // normalize
+  if(vx!==0 && vy!==0){ vx*=0.7071; vy*=0.7071; }
+  player.x += vx*player.speed;
+  player.y += vy*player.speed;
+  // boundaries
+  player.x = Math.max(8, Math.min(W-player.w-8, player.x));
+  player.y = Math.max(8, Math.min(H-player.h-8, player.y));
+
+  // collect stars
+  for(let s of stars){
+    if(!s.collected){
+      let box = {x:s.x-s.r, y:s.y-s.r, w:s.r*2, h:s.r*2};
+      if(rectsOverlap(player,box)){
+        s.collected = true;
+        pushMessage("Stjärna samlad!");
+      }
+    }
+  }
+
+  // interaction with NPC (space)
+  const npcBox = {x:npc.x, y:npc.y, w:npc.w, h:npc.h};
+  if(keys[' '] ){
+    if(rectsOverlap(player,npcBox) && !npc.dialogShown){
+      npc.dialogShown = true;
+      pushMessage("Hotellvärd: Hej! Hitta tre stjärnor så får du pris.");
+    }
+  }
+
+  // messages TTL
+  messages.forEach(m => m.ttl--);
+  while(messages.length && messages[0].ttl<=0) messages.shift();
+}
+
+function drawRoom(){
+  // simple background: floor + wall + rugs + doors
+  // wall
+  ctx.fillStyle = "#e6d6b8"; ctx.fillRect(0,0,W,120);
+  // floor
+  ctx.fillStyle = "#f6f1e6"; ctx.fillRect(0,120,W,H-120);
+  // rug
+  ctx.fillStyle = "#d18b6a"; ctx.fillRect(180,200,120,80);
+  // door
+  ctx.fillStyle = "#6b4a3a"; ctx.fillRect(28,46,46,74);
+  ctx.fillStyle = "#caa"; ctx.fillRect(28+36,46+24,8,10);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawRoom();
+
+  // draw stars
+  for(let s of stars){
+    if(!s.collected){
+      // glow
+      for(let i=5;i>0;i--){
+        ctx.beginPath();
+        ctx.globalAlpha = 0.04*i;
+        ctx.arc(s.x,s.y, s.r+i*6, 0, Math.PI*2);
+        ctx.fillStyle = "#ffd700";
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // star circle
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle = "#ffd700"; ctx.fill();
+      // little sparkle
+      ctx.strokeStyle="#fff"; ctx.lineWidth=1;
+      ctx.stroke();
+    }
+  }
+
+  // npc
+  ctx.fillStyle = "#3b3b3b";
+  ctx.fillRect(npc.x, npc.y, npc.w, npc.h);
+  // face
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(npc.x+6,npc.y+8,6,6);
+  ctx.fillRect(npc.x+22,npc.y+8,6,6);
+
+  // player
+  ctx.fillStyle = "#2b7a2b";
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  // head as circle
+  ctx.fillStyle = "#ffd8b5";
+  ctx.fillRect(player.x+6, player.y-10, player.w-12, 10);
+
+  // UI: collected count
+  const collected = stars.filter(s=>s.collected).length;
+  ctx.font = "18px sans-serif"; ctx.fillStyle = "#111";
+  ctx.fillText(`Stjärnor: ${collected}/3`, 12, 22);
+
+  // messages
+  ctx.font = "16px sans-serif";
+  let y=H-12;
+  for(let i=messages.length-1;i>=0;i--){
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(12, y-22, 380, 26);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(messages[i].t, 18, y-4);
+    y -= 32;
+  }
+
+  // win screen
+  if(collected >= 3){
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = "#fff";
+    ctx.font = "36px sans-serif";
+    ctx.fillText("Grattis! Du hittade alla stjärnor!", 60, H/2-6);
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Spelet är en prototyp — vill du ha fler rum eller originalgrafik?", 64, H/2 + 26);
+  }
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+
+</script>
+</body>
+</html>
